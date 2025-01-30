@@ -27,22 +27,9 @@ struct alignas(16) MeshVertex {
 #endif
 
 #define BASE_COLOR_MAP_INDEX 0
-#define DIFFUSE_MAP_INDEX 0
-
-#define NORMAL_MAP_INDEX 1
-#define NORMAL_CAMERA_MAP_INDEX 1
-
-#define SHININESS_MAP_INDEX 2
-#define DIFFUSE_ROUGHNESS_MAP_INDEX 2
-
+#define OCCLUSION_METALLIC_ROUGHNESS_MAP_INDEX 1
+#define NORMAL_MAP_INDEX 2
 #define EMISSIVE_MAP_INDEX 3
-#define EMISSIVE_COLOR_MAP_INDEX 3
-
-#define SPECULAR_MAP_INDEX 4
-#define METALNESS_MAP_INDEX 4
-
-#define AMBIENT_OCCLUSION_MAP_INDEX 5
-#define LIGHTMAP_MAP_INDEX 5
 
 struct AABB {
 	glm::vec3 min;
@@ -53,7 +40,7 @@ struct Mesh
 {
 	std::vector<MeshVertex> vertices;
 	std::vector<uint32_t> indices;
-	ogl::Texture2D* textures[6];
+	ogl::Texture2D* textures[4];
 	glm::mat4 transform;
 	glm::vec4 base_color;
 	glm::vec4 emissive_color;

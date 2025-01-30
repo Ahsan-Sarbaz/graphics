@@ -24,7 +24,7 @@ std::tuple<std::vector<MeshVertex>, std::vector<unsigned int>> Optimize(const fl
 	meshopt_remapVertexBuffer(optVertices.data(), &vertices[0], verticesCount, sizeof(MeshVertex), &remap[0]);
 
 	meshopt_optimizeVertexCache(optIndices.data(), optIndices.data(), indicesCount, vertex_count);
-//	meshopt_optimizeOverdraw(optIndices.data(), optIndices.data(), indicesCount, &optVertices[0].position.x, vertex_count, sizeof(MeshVertex), 1.05f);
+	//	meshopt_optimizeOverdraw(optIndices.data(), optIndices.data(), indicesCount, &optVertices[0].position.x, vertex_count, sizeof(MeshVertex), 1.05f);
 
 	return { std::move(optVertices), std::move(optIndices) };
 }
@@ -182,6 +182,10 @@ void Model::ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root, co
 #endif // OPTIMIZE
 
 
+	bool is_metallic_roughness = false;
+	bool is_specular_glossiness = false;
+	bool is_pbr = false;
+
 	if (scene->HasMaterials())
 	{
 		auto mat = scene->mMaterials[mesh->mMaterialIndex];
@@ -198,209 +202,132 @@ void Model::ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root, co
 		ret = aiGetMaterialColor(mat, AI_MATKEY_COLOR_SPECULAR, &specular);
 		gpuMesh.specular_color = { specular.r, specular.g, specular.b, specular.a };
 
-	}
 
-	if (load_textures) {
-		auto mat = scene->mMaterials[mesh->mMaterialIndex];
-
-		if (mat->GetTextureCount(aiTextureType_BASE_COLOR) > 0)
+		int shading_model;
+		mat->Get(AI_MATKEY_SHADING_MODEL, shading_model);
+		float metallic_factor;
+		mat->Get(AI_MATKEY_METALLIC_FACTOR, metallic_factor);
+		float glossiness_factor;
+		mat->Get(AI_MATKEY_GLOSSINESS_FACTOR, glossiness_factor);
+		if (shading_model == aiShadingMode_PBR_BRDF)
 		{
-			aiString path;
-			mat->GetTexture(aiTextureType_BASE_COLOR, 0, &path);
-
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[BASE_COLOR_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, true);
-			} else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[BASE_COLOR_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, true);
-			}
-		}
-		else if (mat->GetTextureCount(aiTextureType_DIFFUSE) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_DIFFUSE, 0, &path);
-
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[DIFFUSE_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, true);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[DIFFUSE_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, true);
-			}
+			is_pbr = true;
+			if (metallic_factor > 0) is_metallic_roughness = true;
+			if (glossiness_factor > 0) is_specular_glossiness = true;
 		}
 
-		if (mat->GetTextureCount(aiTextureType_SPECULAR) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_SPECULAR, 0, &path);
 
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[SPECULAR_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[SPECULAR_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
-		}
-		else if (mat->GetTextureCount(aiTextureType_METALNESS) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_METALNESS, 0, &path);
+		if (load_textures) {
+			auto mat = scene->mMaterials[mesh->mMaterialIndex];
 
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[METALNESS_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[METALNESS_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
-		}
+			// loading base color, roughness, metallic
+			if (is_metallic_roughness) {
 
-		if (mat->GetTextureCount(aiTextureType_NORMAL_CAMERA) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_NORMAL_CAMERA, 0, &path);
+				if (mat->GetTextureCount(aiTextureType_BASE_COLOR) > 0)
+				{
+					aiString path;
+					mat->GetTexture(aiTextureType_BASE_COLOR, 0, &path);
 
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[NORMAL_CAMERA_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[NORMAL_CAMERA_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
-		}
-		else if (mat->GetTextureCount(aiTextureType_NORMALS) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_NORMALS, 0, &path);
+					if (path.C_Str()[0] == '*')
+					{
+						auto texture = scene->GetEmbeddedTexture(path.C_Str());
+						gpuMesh.textures[BASE_COLOR_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, true);
+					}
+					else {
+						std::stringstream ss;
+						ss << root << "\\" << path.C_Str();
+						gpuMesh.textures[BASE_COLOR_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, true);
+					}
+				}
+				else if (mat->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+				{
+					aiString path;
+					mat->GetTexture(aiTextureType_DIFFUSE, 0, &path);
 
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[NORMAL_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[NORMAL_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
-		}
+					if (path.C_Str()[0] == '*')
+					{
+						auto texture = scene->GetEmbeddedTexture(path.C_Str());
+						gpuMesh.textures[BASE_COLOR_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, true);
+					}
+					else {
+						std::stringstream ss;
+						ss << root << "\\" << path.C_Str();
+						gpuMesh.textures[BASE_COLOR_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, true);
+					}
+				}
 
-		if (mat->GetTextureCount(aiTextureType_SHININESS) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_SHININESS, 0, &path);
 
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[SHININESS_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[SHININESS_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
-		}
-		else if (mat->GetTextureCount(aiTextureType_DIFFUSE_ROUGHNESS) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_DIFFUSE_ROUGHNESS, 0, &path);
+				// this should be the occlusion metallic roughness map
+				if (mat->GetTextureCount(aiTextureType_METALNESS) > 0)
+				{
+					aiString path;
+					mat->GetTexture(aiTextureType_METALNESS, 0, &path);
 
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[DIFFUSE_ROUGHNESS_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[DIFFUSE_ROUGHNESS_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
-		}
+					if (path.C_Str()[0] == '*')
+					{
+						auto texture = scene->GetEmbeddedTexture(path.C_Str());
+						gpuMesh.textures[OCCLUSION_METALLIC_ROUGHNESS_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
+					}
+					else {
+						std::stringstream ss;
+						ss << root << "\\" << path.C_Str();
+						gpuMesh.textures[OCCLUSION_METALLIC_ROUGHNESS_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
+					}
+				}
+				else if (mat->GetTextureCount(aiTextureType_DIFFUSE_ROUGHNESS) > 0)
+				{
+					aiString path;
+					mat->GetTexture(aiTextureType_DIFFUSE_ROUGHNESS, 0, &path);
 
-		if (mat->GetTextureCount(aiTextureType_AMBIENT_OCCLUSION) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_AMBIENT_OCCLUSION, 0, &path);
+					if (path.C_Str()[0] == '*')
+					{
+						auto texture = scene->GetEmbeddedTexture(path.C_Str());
+						gpuMesh.textures[OCCLUSION_METALLIC_ROUGHNESS_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
+					}
+					else {
+						std::stringstream ss;
+						ss << root << "\\" << path.C_Str();
+						gpuMesh.textures[OCCLUSION_METALLIC_ROUGHNESS_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
+					}
+				}
 
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[AMBIENT_OCCLUSION_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[AMBIENT_OCCLUSION_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
+				if (mat->GetTextureCount(aiTextureType_NORMALS) > 0)
+				{
+					aiString path;
+					mat->GetTexture(aiTextureType_NORMALS, 0, &path);
 
-		}
-		else if (mat->GetTextureCount(aiTextureType_LIGHTMAP) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_LIGHTMAP, 0, &path);
+					if (path.C_Str()[0] == '*')
+					{
+						auto texture = scene->GetEmbeddedTexture(path.C_Str());
+						gpuMesh.textures[NORMAL_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
+					}
+					else {
+						std::stringstream ss;
+						ss << root << "\\" << path.C_Str();
+						gpuMesh.textures[NORMAL_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
+					}
+				}
 
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[LIGHTMAP_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[LIGHTMAP_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
-		}
+				if (mat->GetTextureCount(aiTextureType_EMISSIVE) > 0)
+				{
+					aiString path;
+					mat->GetTexture(aiTextureType_EMISSIVE, 0, &path);
 
-		if (mat->GetTextureCount(aiTextureType_EMISSION_COLOR) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_EMISSION_COLOR, 0, &path);
-
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[EMISSIVE_COLOR_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[EMISSIVE_COLOR_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
-			}
-		}
-		else if (mat->GetTextureCount(aiTextureType_EMISSIVE) > 0)
-		{
-			aiString path;
-			mat->GetTexture(aiTextureType_EMISSIVE, 0, &path);
-
-			if (path.C_Str()[0] == '*')
-			{
-				auto texture = scene->GetEmbeddedTexture(path.C_Str());
-				gpuMesh.textures[EMISSIVE_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, false);
-			}
-			else {
-				std::stringstream ss;
-				ss << root << "\\" << path.C_Str();
-				gpuMesh.textures[EMISSIVE_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, false);
+					if (path.C_Str()[0] == '*')
+					{
+						auto texture = scene->GetEmbeddedTexture(path.C_Str());
+						gpuMesh.textures[EMISSIVE_MAP_INDEX] = TextureLoader::Load(path.C_Str(), texture->pcData, texture->mWidth, true);
+					}
+					else {
+						std::stringstream ss;
+						ss << root << "\\" << path.C_Str();
+						gpuMesh.textures[EMISSIVE_MAP_INDEX] = TextureLoader::Load(ss.str(), nullptr, 0, true);
+					}
+				}
 			}
 		}
 	}
+
 
 	meshes.push_back(gpuMesh);
 }
@@ -474,7 +401,7 @@ bool Model::Load(const char* root, const char* filename, float scale, bool load_
 			this->camera_fov = cam->mHorizontalFOV;
 			this->camera_far = cam->mClipPlaneFar;
 			this->camera_near = cam->mClipPlaneNear;
-			this->camera_aspect= cam->mAspect;
+			this->camera_aspect = cam->mAspect;
 		}
 	}
 

@@ -2,10 +2,6 @@
 
 layout(location = 0) out vec4 final_color;
 
-layout(location = 0) in vec3 world_pos;
-layout(location = 1) in vec3 camera_position_tbn;
-layout(location = 2) in vec2 uv;
-layout(location = 3) in mat3 tbn;
 
 struct DirectionalLight {
     vec4 direction_intensity; // intensity in w
@@ -23,20 +19,6 @@ struct SpotLight {
     vec4 color_angle; // angle in w
 };
 
-layout(std140, binding = 0) uniform PerFrame {
-    mat4 view;
-    mat4 projection;
-    vec3 camera_position;
-};
-
-layout(std140, binding = 1) uniform PerObject {
-    mat4 model;
-    mat4 normal_matrix;
-    vec4 base_color;
-    vec4 emissive_color;
-    vec4 specular_color;
-};
-
 layout(std140, binding = 2) uniform u_DirectionalLight {
     DirectionalLight sun;
 };
@@ -44,29 +26,6 @@ layout(std140, binding = 2) uniform u_DirectionalLight {
 layout(std140, binding = 3) uniform u_PointLights {
     PointLight point_lights[4];
 };
-
-#define BASE_COLOR_MAP_INDEX 0
-#define DIFFUSE_MAP_INDEX 0
-
-#define NORMAL_MAP_INDEX 1
-#define NORMAL_CAMERA_MAP_INDEX 1
-
-#define SHININESS_MAP_INDEX 2
-#define DIFFUSE_ROUGHNESS_MAP_INDEX 2
-
-#define EMISSIVE_MAP_INDEX 3
-#define EMISSIVE_COLOR_MAP_INDEX 3
-
-#define SPECULAR_MAP_INDEX 4
-#define METALNESS_MAP_INDEX 4
-
-#define AMBIENT_OCCLUSION_MAP_INDEX 5
-#define LIGHTMAP_MAP_INDEX 5
-
-layout(binding = BASE_COLOR_MAP_INDEX) uniform sampler2D base_color_map;
-layout(binding = NORMAL_MAP_INDEX) uniform sampler2D normal_map;
-layout(binding = AMBIENT_OCCLUSION_MAP_INDEX) uniform sampler2D occlussion_roughness_map;
-layout(binding = EMISSIVE_MAP_INDEX) uniform sampler2D emissive_map;
 
 // Constants defined at compile time
 const float PI = 3.14159265359;
@@ -160,35 +119,50 @@ vec3 directional_light_radiance(vec3 albedo, vec3 N, vec3 V, float NoV, float me
     return direct_light;
 }
 
+#define BASE_COLOR_MAP_INDEX 0
+#define OCCLUSION_METALLIC_ROUGHNESS_MAP_INDEX 1
+#define NORMAL_MAP_INDEX 2
+#define EMISSIVE_MAP_INDEX 3
+
+layout(binding = BASE_COLOR_MAP_INDEX) uniform sampler2D base_color_map;
+layout(binding = NORMAL_MAP_INDEX) uniform sampler2D normal_map;
+layout(binding = OCCLUSION_METALLIC_ROUGHNESS_MAP_INDEX) uniform sampler2D orm_map;
+layout(binding = EMISSIVE_MAP_INDEX) uniform sampler2D emissive_map;
+
+layout(location = 0) in vec3 world_pos;
+layout(location = 1) in vec3 view_pos_tbn;
+layout(location = 2) in vec2 uv;
+layout(location = 3) in mat3 tbn;
+
 void main() {
-    // Sample textures - done once to avoid multiple texture reads
-    vec4 albedo_sample = texture(base_color_map, uv);
+    vec4 base_color_sample = texture(base_color_map, uv);
 
     // Early discard for fully transparent pixels
-    if (albedo_sample.a < EPSILON) {
+    if (base_color_sample.a < EPSILON) {
         discard;
     }
     
     vec3 normal_sample = texture(normal_map, uv).rgb * 2.0 - 1.0;
-    vec4 mr_sample = texture(occlussion_roughness_map, uv);
-    float ao = mr_sample.r;
-
+    vec3 orm_sample = texture(orm_map, uv).rgb;
+    vec3 emissive_sample = texture(emissive_map, uv).rgb;
+    float ao = orm_sample.r;
+	float metallic = orm_sample.b;
+    float roughness = orm_sample.g; 
+    
     // Transform normal and compute essential vectors - normalized once
     vec3 N = normalize(tbn * normal_sample);
-    vec3 V = normalize(camera_position_tbn);
+    vec3 V = normalize(view_pos_tbn);
 
     // Compute dot products once and cache them
     float NoV = max(dot(N, V), EPSILON);
 
     // Material properties
-    float metallic = mr_sample.b;
-    float roughness = mr_sample.g; 
     
     // Calculate F0 (specular reflection at zero incidence)
-    vec3 F0 = mix(F0_NON_METAL, albedo_sample.rgb, metallic);
+    vec3 F0 = mix(F0_NON_METAL, base_color_sample.rgb, metallic);
 
     // Directional light contribution
-    vec3 sun_light = directional_light_radiance(albedo_sample.rgb, N, V, NoV, metallic, roughness, F0);
+    vec3 sun_light = directional_light_radiance(base_color_sample.rgb, N, V, NoV, metallic, roughness, F0);
 
     // Point lights contribution
     vec3 point_lights_contribution = vec3(0.0);
@@ -196,7 +170,7 @@ void main() {
         point_lights_contribution += point_light_radiance(
             point_lights[i], 
             world_pos, 
-            albedo_sample.rgb, 
+            base_color_sample.rgb, 
             N, 
             V, 
             NoV, 
@@ -207,11 +181,11 @@ void main() {
     }
 
     // Ambient term
-    float ambient_intensity = 0.1;
-    vec3 ambient = albedo_sample.rgb * ambient_intensity * ao;
+    float ambient_intensity = 0.01;
+    vec3 ambient = base_color_sample.rgb * ambient_intensity * ao;
 
     // Combine lighting contributions
-    vec3 final = sun_light + point_lights_contribution + ambient;
+    vec3 final = emissive_sample + sun_light + point_lights_contribution + ambient;
     
     final_color = vec4(final, 1.0);
 }

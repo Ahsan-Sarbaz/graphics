@@ -1,6 +1,7 @@
 #include "TextureLoader.h"
 #include <execution>
 #include "stb_image.h"
+#include <gli/gli.hpp>
 
 TextureLoader* TextureLoader::instance = nullptr;
 
@@ -35,6 +36,10 @@ struct PromisedTexture
 	int width, height, channels;
 	bool bindless;
 	bool srgb;
+	bool compressed;
+	int internal_format;
+	int pixel_format;
+	bool is_stb;
 };
 
 void TextureLoader::LoadPromisedTextures()
@@ -90,14 +95,44 @@ void TextureLoader::LoadPromisedTextures()
 			auto& p = promisedTextures[index];
 			if (p.data != nullptr)
 			{
-				stbi_set_flip_vertically_on_load(flip);
-				auto buffer = stbi_load_from_memory(p.data, p.data_size, &p.width, &p.height, &p.channels, 0);
-				if (free_data) {
-					delete[] p.data;
-				}
+				if (path.find(".dds") != std::string::npos)
+				{
+					gli::texture tex = gli::load_dds((const char*)p.data, p.data_size);
+					gli::gl GL(gli::gl::PROFILE_GL33);
+					gli::gl::format const Format = GL.translate(tex.format(), tex.swizzles());
+					GLenum Target = GL.translate(tex.target());
 
-				p.data = buffer;
-				p.data_size = -1;
+					char* buffer = new char[tex.size(0)];
+					memcpy(buffer, tex.data(), tex.size(0));
+
+					printf_s("internal format 0x%X, levels %d\n", Format.Internal, tex.levels());
+
+					p.width = tex.extent().x;
+					p.height = tex.extent().y;
+					p.channels = 0;
+					p.internal_format = Format.Internal;
+					p.pixel_format = Format.Internal;
+					p.data = (unsigned char*)buffer;
+					p.data_size = int(tex.size(0));
+					p.srgb = srgb;
+					p.compressed = gli::is_compressed(tex.format());
+					p.is_stb = false;
+				}
+				else {
+					stbi_set_flip_vertically_on_load(flip);
+					auto buffer = stbi_load_from_memory(p.data, p.data_size, &p.width, &p.height, &p.channels, 0);
+					if (free_data) {
+						delete[] p.data;
+					}
+
+					p.data = buffer;
+					p.data_size = -1;
+					p.internal_format = 0;
+					p.pixel_format = 0;
+					p.compressed = false;
+					p.srgb = srgb;
+					p.is_stb = (!free_data);
+				}
 			}
 		});
 
@@ -106,9 +141,13 @@ void TextureLoader::LoadPromisedTextures()
 		auto& p = promisedTextures[i];
 		if (p.data != nullptr)
 		{
-			auto texture = ogl::create_texture_from_bytes(p.data, p.width, p.height, p.channels, p.srgb);
+			auto texture = ogl::create_texture_from_bytes(p.data, p.data_size, p.width, p.height, p.channels, p.srgb, p.compressed, p.internal_format, p.pixel_format);
 			textures[i]->id = texture.id;
-			stbi_image_free(p.data);
+			if (p.is_stb) {
+				stbi_image_free(p.data);
+			} else{
+				delete[] p.data;
+			}
 		}
 	}
 

@@ -29,6 +29,7 @@ namespace ogl {
 		GLuint id;
         int format;
         int index;
+        bool draw;
 	};
 
     struct Framebuffer {
@@ -47,14 +48,14 @@ namespace ogl {
     void framebuffer_color_attachment(Framebuffer& framebuffer, FramebufferAttachment& attachment, int index);
     void framebuffer_depth_attachment(Framebuffer& framebuffer, FramebufferAttachment& attachment);
     void delete_framebuffer_attachment(FramebufferAttachment attachment);
-
+    void framebuffer_draw_attachments(Framebuffer& framebuffer);
     void framebuffer_resize(Framebuffer& framebuffer, int width, int height);
 
-    FramebufferAttachment create_framebuffer_attachment(Framebuffer& framebuffer, int format);
+    FramebufferAttachment create_framebuffer_attachment(Framebuffer& framebuffer, int format, bool draw);
 
     Texture2D create_texture(int width, int height, int format);
 
-    Texture2D create_texture_from_bytes(void* data, int width, int height, int channels, bool srgb);
+    Texture2D create_texture_from_bytes(void* data, int size, int width, int height, int channels, bool srgb,bool compressed = false, int internal_format = 0, int pixel_format = 0);
 
     void delete_texture(Texture2D texture);
 

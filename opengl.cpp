@@ -170,10 +170,15 @@ namespace ogl {
 		framebuffer.depth_attachment = attachment;
     }
 
-    FramebufferAttachment create_framebuffer_attachment(Framebuffer& framebuffer, int format) {
+    FramebufferAttachment create_framebuffer_attachment(Framebuffer& framebuffer, int format, bool draw) {
         FramebufferAttachment attachment = {};
 		attachment.format = format;
+		attachment.draw = draw;
         glCreateTextures(GL_TEXTURE_2D, 1, &attachment.id);
+        glTextureParameteri(attachment.id, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(attachment.id, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(attachment.id, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTextureParameteri(attachment.id, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTextureStorage2D(attachment.id, 1, format, framebuffer.width, framebuffer.height);
         return attachment;
     }
@@ -182,6 +187,21 @@ namespace ogl {
 		glDeleteTextures(1, &attachment.id);
 	}
 
+    void framebuffer_draw_attachments(Framebuffer& framebuffer) {
+        std::vector<uint32_t> attachments;
+        for (FramebufferAttachment attachment : framebuffer.color_attachments) {
+            if (attachment.draw) {
+			    attachments.push_back(GL_COLOR_ATTACHMENT0 + attachment.index);
+            }
+		}
+
+        if (framebuffer.depth_attachment.draw) {
+			attachments.push_back(GL_DEPTH_ATTACHMENT);
+		}
+
+        glFramebufferDrawBuffersEXT(framebuffer.id, attachments.size(), attachments.data());
+    }
+
     void framebuffer_resize(Framebuffer& framebuffer, int width, int height) {
 		framebuffer.width = width;
 		framebuffer.height = height;
@@ -189,12 +209,15 @@ namespace ogl {
         std::vector<FramebufferAttachment> attachments;
 
         for (FramebufferAttachment attachment : framebuffer.color_attachments) {
-            auto a = create_framebuffer_attachment(framebuffer, attachment.format);
+            auto a = create_framebuffer_attachment(framebuffer, attachment.format, attachment.draw);
             a.index = attachment.index;
             attachments.push_back(a);
 		}
 
-        FramebufferAttachment depth_attachment = create_framebuffer_attachment(framebuffer, framebuffer.depth_attachment.format);
+        FramebufferAttachment depth_attachment = {};
+        if (framebuffer.depth_attachment.id != 0) {
+            depth_attachment = create_framebuffer_attachment(framebuffer, framebuffer.depth_attachment.format, framebuffer.depth_attachment.draw);
+        }
 
         std::vector<FramebufferAttachment> old_attachments = framebuffer.color_attachments;
         framebuffer.color_attachments.clear();
@@ -203,16 +226,23 @@ namespace ogl {
 			framebuffer_color_attachment(framebuffer, attachment, attachment.index);
         }
 
-        auto old_depth_attachment = framebuffer.depth_attachment;
-		framebuffer.depth_attachment = {};
+        FramebufferAttachment old_depth_attachment = {};
+        if (depth_attachment.id != 0) {
+            old_depth_attachment = framebuffer.depth_attachment;
+            framebuffer.depth_attachment = {};
+        }
 
         framebuffer_depth_attachment(framebuffer, depth_attachment);
+
+        framebuffer_draw_attachments(framebuffer);
 
 		for (FramebufferAttachment attachment : old_attachments) {
 			delete_framebuffer_attachment(attachment);
 		}
 
-        delete_framebuffer_attachment(old_depth_attachment);
+        if (depth_attachment.id != 0) {
+            delete_framebuffer_attachment(old_depth_attachment);
+        }
     }
 
 
@@ -225,40 +255,64 @@ namespace ogl {
 		return texture;
 	}
 
-    Texture2D create_texture_from_bytes(void* data, int width, int height, int channels, bool srgb) {
+    Texture2D create_texture_from_bytes(void* data, int size, int width, int height, int channels, bool srgb, bool compressed, int internal_format, int pixel_format) {
         Texture2D texture;
 
         glCreateTextures(GL_TEXTURE_2D, 1, &texture.id);
 
-        int internal_format = 0;
-        int pixel_format = 0;
-
-        switch (channels) {
-        case 1:
-            internal_format = GL_R8;
-            pixel_format = GL_RED;
-            break;
-        case 2:
-            internal_format = GL_RG8;
-            pixel_format = GL_RG;
-            break;
-        case 3:
-            internal_format = srgb ? GL_SRGB8 : GL_RGB8;
-            pixel_format = GL_RGB;
-            break;
-        case 4:
-            internal_format = srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8;
-            pixel_format = GL_RGBA;
-            break;
-        default:
-            std::cerr << "Invalid number of channels " << channels << std::endl;
-            return {};
+        if (internal_format == 0) {
+            switch (channels) {
+            case 1:
+                internal_format = GL_R8;
+                break;
+            case 2:
+                internal_format = GL_RG8;
+                break;
+            case 3:
+                internal_format = srgb ? GL_SRGB8 : GL_RGB8;
+                break;
+            case 4:
+                internal_format = srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8;
+                break;
+            default:
+                std::cerr << "Invalid number of channels " << channels << std::endl;
+                return {};
+            }
+        }
+        if (pixel_format == 0 && !compressed) {
+            switch (channels) {
+            case 1:
+                pixel_format = GL_RED;
+                break;
+            case 2:
+                pixel_format = GL_RG;
+                break;
+            case 3:
+                pixel_format = GL_RGB;
+                break;
+            case 4:
+                pixel_format = GL_RGBA;
+                break;
+            default:
+                std::cerr << "Invalid number of channels " << channels << std::endl;
+                return {};
+            }
         }
 
         glTextureStorage2D(texture.id, 1, internal_format, width, height);
 
-        glTextureSubImage2D(texture.id, 0, 0, 0, width, height, pixel_format, GL_UNSIGNED_BYTE, data);
-        glGenerateTextureMipmap(texture.id);
+        glTextureParameteri(texture.id, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTextureParameteri(texture.id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTextureParameteri(texture.id, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTextureParameteri(texture.id, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+        if (compressed) {
+            glCompressedTextureSubImage2D(texture.id, 0, 0, 0, width, height, pixel_format, size, data);
+        }
+        else {
+            glTextureSubImage2D(texture.id, 0, 0, 0, width, height, pixel_format, GL_UNSIGNED_BYTE, data);
+            glGenerateTextureMipmap(texture.id);
+        }
 
         return texture;
     }
