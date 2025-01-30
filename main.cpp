@@ -587,9 +587,9 @@ int main(int argc, char* argv[]) {
 
 	Model model;
 	//std::filesystem::path p = "C:\\dev\\pbr\\pbr\\\models\\WaterBottle.gltf";
-	std::filesystem::path p = "C:\\dev\\pbr\\pbr\\niagara_bistro\\bistro.gltf";
+	//std::filesystem::path p = "C:\\dev\\pbr\\pbr\\niagara_bistro\\bistro.gltf";
 	//std::filesystem::path p = "models/Sponza.glb";
-	//std::filesystem::path p = "models/FlightHelmet.gltf";
+	std::filesystem::path p = "models/FlightHelmet.gltf";
 	//std::filesystem::path p = "models/DamagedHelmet.glb";
 	//std::filesystem::path p = "models/Corset.glb";
 
@@ -680,7 +680,7 @@ int main(int argc, char* argv[]) {
 	auto gbuffer_framebuffer = ogl::create_framebuffer(WINDOW_WIDTH, WINDOW_HEIGHT);
 	{
 		auto color_attachment0 = ogl::create_framebuffer_attachment(gbuffer_framebuffer, GL_RGBA16F, true); // positions
-		auto color_attachment1 = ogl::create_framebuffer_attachment(gbuffer_framebuffer, GL_SRGB8_ALPHA8, true); // albedo
+		auto color_attachment1 = ogl::create_framebuffer_attachment(gbuffer_framebuffer, GL_RGBA8, true); // albedo
 		auto color_attachment2 = ogl::create_framebuffer_attachment(gbuffer_framebuffer, GL_RGB10_A2, true); // normals
 		auto color_attachment3 = ogl::create_framebuffer_attachment(gbuffer_framebuffer, GL_RGB10_A2, true); // view position
 		auto color_attachment4 = ogl::create_framebuffer_attachment(gbuffer_framebuffer, GL_RGBA8, true); // orm

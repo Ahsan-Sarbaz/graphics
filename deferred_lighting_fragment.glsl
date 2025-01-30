@@ -150,7 +150,7 @@ void main() {
     float roughness = orm_sample.g; 
     
     // Transform normal and compute essential vectors - normalized once
-    vec3 N = normal_sample;
+    vec3 N = normalize(normal_sample);
     vec3 V = texture(g_view_pos, uv).xyz;
 
     // Compute dot products once and cache them
@@ -188,5 +188,6 @@ void main() {
     // Combine lighting contributions
     vec3 final = sun_light + point_lights_contribution + ambient;
     
+	
     final_color = vec4(final, 1.0);
 }

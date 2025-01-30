@@ -11,6 +11,11 @@ layout(location = 1) in vec3 view_pos_tbn;
 layout(location = 2) in vec2 uv;
 layout(location = 3) in mat3 tbn;
 
+layout(std140, binding = 0) uniform PerFrame {
+    mat4 view;
+    mat4 projection;
+    vec3 camera_position;
+};
 
 #define BASE_COLOR_MAP_INDEX 0
 #define OCCLUSION_METALLIC_ROUGHNESS_MAP_INDEX 1
@@ -32,6 +37,6 @@ void main() {
 	final_color = base_color_sample;
 	final_normal = normalize(vec4(tbn * normal_sample, 1.0));
 	final_orm = orm_sample;
-	final_view_pos = vec4(view_pos_tbn.xyz, 1.0);
+	final_view_pos = vec4(view_pos_tbn, 1.0);
 
 }
