@@ -150,8 +150,8 @@ void main() {
     float roughness = orm_sample.g; 
     
     // Transform normal and compute essential vectors - normalized once
-    vec3 N = normalize(normal_sample);
-    vec3 V = texture(g_view_pos, uv).xyz;
+    vec3 N = (normal_sample);
+    vec3 V = normalize(texture(g_view_pos, uv).xyz);
 
     // Compute dot products once and cache them
     float NoV = max(dot(N, V), EPSILON);

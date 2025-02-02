@@ -27,7 +27,7 @@ layout(std140, binding = 1) uniform PerObject {
 };
 
 layout(location = 0) out vec3 world_pos;
-layout(location = 1) out vec3 camera_position_tbn;
+layout(location = 1) out vec3 view_pos_tbn;
 layout(location = 2) out vec2 uv;
 layout(location = 3) out mat3 tbn;
 
@@ -49,7 +49,7 @@ void main() {
 
 	mat3 invTBN = transpose(TBN);
 
-	camera_position_tbn = invTBN * (camera_position - pos.xyz);
+	view_pos_tbn = invTBN * (camera_position - pos.xyz);
 	
 	tbn = TBN;
 

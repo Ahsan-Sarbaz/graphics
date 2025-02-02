@@ -35,7 +35,7 @@ void main() {
 
 	final_positions = vec4(world_pos, 1.0);
 	final_color = base_color_sample;
-	final_normal = normalize(vec4(tbn * normal_sample, 1.0));
+	final_normal = vec4(tbn * normal_sample, 1.0);
 	final_orm = orm_sample;
 	final_view_pos = vec4(view_pos_tbn, 1.0);
 
